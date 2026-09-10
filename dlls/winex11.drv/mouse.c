@@ -271,7 +271,8 @@ void x11drv_xinput2_enable( Display *display, Window window )
     {
         XISetMask( mask_bits, XI_DeviceChanged );
         XISetMask( mask_bits, XI_RawMotion );
-        XISetMask( mask_bits, XI_ButtonPress );
+        XISetMask( mask_bits, XI_RawButtonPress );
+        XISetMask( mask_bits, XI_RawButtonRelease );
     }
     else
     {
@@ -1744,6 +1745,46 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
     return TRUE;
 }
 
+/***********************************************************************
+ *           X11DRV_RawButtonEvent
+ */
+static BOOL X11DRV_RawButtonEvent( XGenericEventCookie *xev )
+{
+    const UINT *button_data, *button_flags;
+    XIRawEvent *event = xev->data;
+    struct x11drv_thread_data *thread_data = x11drv_thread_data();
+    int buttonNum = event->detail - 1;
+    INPUT input;
+
+    if (buttonNum < 0 || buttonNum >= NB_BUTTONS) return FALSE;
+    if (event->deviceid != thread_data->xinput2_pointer) return FALSE;
+
+    TRACE( "raw button %u %s\n", buttonNum, event->evtype == XI_RawButtonRelease ? "up" : "down" );
+
+    if (event->evtype == XI_RawButtonRelease)
+    {
+        button_data = button_up_data;
+        button_flags = button_up_flags;
+    }
+    else
+    {
+        button_data = button_down_data;
+        button_flags = button_down_flags;
+    }
+
+    input.type = INPUT_MOUSE;
+    input.mi.mouseData   = button_data[buttonNum];
+    input.mi.dwFlags     = button_flags[buttonNum] | MOUSEEVENTF_MOVE;
+    input.mi.time        = EVENT_x11_time_to_win32_time( event->time );
+    input.mi.dwExtraInfo = 0;
+    input.mi.dx          = 0;
+    input.mi.dy          = 0;
+    map_raw_event_coords( event, &input );
+
+    NtUserSendHardwareInput( 0, 0, &input, 0 );
+    return TRUE;
+}
+
 static BOOL X11DRV_TouchEvent( HWND hwnd, XGenericEventCookie *xev )
 {
     RECT virtual = NtUserGetVirtualScreenRect( MDT_RAW_DPI );
@@ -1790,7 +1831,6 @@ static BOOL X11DRV_TouchEvent( HWND hwnd, XGenericEventCookie *xev )
  */
 void x11drv_xinput2_load(void)
 {
-    if (!usexinput2) return;
 #if defined(SONAME_LIBXI) && defined(HAVE_X11_EXTENSIONS_XINPUT2_H)
     int event, error;
     void *libxi_handle = dlopen( SONAME_LIBXI, RTLD_NOW );
@@ -1846,6 +1886,10 @@ BOOL X11DRV_GenericEvent( HWND hwnd, XEvent *xev )
         break;
     case XI_RawMotion:
         ret = X11DRV_RawMotion( event );
+        break;
+    case XI_RawButtonPress:
+    case XI_RawButtonRelease:
+        ret = X11DRV_RawButtonEvent( event );
         break;
 
     case XI_TouchBegin:

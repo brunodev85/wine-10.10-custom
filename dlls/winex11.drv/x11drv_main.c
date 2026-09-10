@@ -77,7 +77,6 @@ int primary_monitor = 0;
 BOOL client_side_graphics = TRUE;
 BOOL client_side_with_render = TRUE;
 BOOL shape_layered_windows = TRUE;
-BOOL usexinput2 = FALSE;
 int copy_default_colors = 128;
 int alloc_system_colors = 256;
 int xrender_error_base = 0;
@@ -498,9 +497,6 @@ static void setup_options(void)
 
     if (!get_config_key( hkey, appkey, "AllocSystemColors", buffer, sizeof(buffer) ))
         alloc_system_colors = wcstol( buffer, NULL, 0 );
-
-    if (!get_config_key( hkey, appkey, "UseXInput2", buffer, sizeof(buffer) ))
-        usexinput2 = IS_OPTION_TRUE( buffer[0] );
 
     get_config_key( hkey, appkey, "InputStyle", input_style, sizeof(input_style) );
 
